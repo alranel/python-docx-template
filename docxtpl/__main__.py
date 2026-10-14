@@ -247,6 +247,8 @@ def main():
         save_file(doc, parsed_args)
     except RuntimeError as e:
         print("Error: " + e.__str__())
+        if parsed_args.get(VALIDATE_ARG) or parsed_args.get(REPORT_ARG):
+            sys.exit(1)
         return
     finally:
         if not parsed_args[QUIET_ARG]:
