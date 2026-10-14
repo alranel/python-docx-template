@@ -377,6 +377,17 @@ class DocxTemplate(object):
                     xml = self.render_xml_part(xml, part, context, jinja_env)
                     part._blob = xml.encode("utf-8")
 
+    @staticmethod
+    def _has_jinja_markers(
+        text: str, jinja_env: Optional[Environment] = None
+    ) -> bool:
+        env = jinja_env if jinja_env is not None else Environment()
+        return (
+            env.variable_start_string in text
+            or env.block_start_string in text
+            or env.comment_start_string in text
+        )
+
     def render_hyperlinks(
         self, context: Dict[str, Any], jinja_env: Optional[Environment] = None
     ) -> None:
@@ -386,18 +397,15 @@ class DocxTemplate(object):
         render_xml_part(), but their URLs are stored as external relationships
         (e.g. word/_rels/document.xml.rels) and must be rendered separately.
         """
+        env = jinja_env if jinja_env is not None else Environment()
         for part in self.docx.part.package.parts:
             for rel in part.rels.values():
                 if not rel.is_external or rel.reltype != REL_TYPE.HYPERLINK:
                     continue
                 target = rel.target_ref
-                if "{{" not in target and "{%" not in target and "{#" not in target:
+                if not self._has_jinja_markers(target, env):
                     continue
-                if jinja_env:
-                    template = jinja_env.from_string(target)
-                else:
-                    template = Template(target)
-                rel._target = template.render(context)
+                rel._target = env.from_string(target).render(context)
 
     def resolve_listing(self, xml):
 
@@ -945,7 +953,7 @@ class DocxTemplate(object):
                 if not rel.is_external or rel.reltype != REL_TYPE.HYPERLINK:
                     continue
                 target = rel.target_ref
-                if "{{" not in target and "{%" not in target and "{#" not in target:
+                if not self._has_jinja_markers(target, env):
                     continue
                 all_variables |= meta.find_undeclared_variables(env.parse(target))
 
