@@ -12,6 +12,7 @@ OVERWRITE_ARG = "overwrite"
 QUIET_ARG = "quiet"
 VALIDATE_ARG = "validate"
 REPORT_ARG = "report"
+JSON_ERROR_ARG = "json_error"
 
 
 def template_error_payload(exc: TemplateError) -> dict:
@@ -21,15 +22,18 @@ def template_error_payload(exc: TemplateError) -> dict:
     return payload
 
 
-def emit_cli_error(payload: dict) -> None:
-    json.dump(payload, sys.stderr)
-    sys.stderr.write("\n")
+def emit_cli_error(payload: dict, json_error: bool = False) -> None:
+    if json_error:
+        json.dump(payload, sys.stderr)
+        sys.stderr.write("\n")
+    else:
+        print("Error: " + payload["message"], file=sys.stderr)
     sys.exit(1)
 
 
 def make_arg_parser():
     parser = argparse.ArgumentParser(
-        usage="python -m docxtpl [-h] [-o] [-q] [--validate] [--report FILE] {} [{}] [{}]".format(
+        usage="python -m docxtpl [-h] [-o] [-q] [--validate] [--report FILE] [--json-error] {} [{}] [{}]".format(
             TEMPLATE_ARG, JSON_ARG, OUTPUT_ARG
         ),
         description="Make docx file from existing template docx and json data.",
@@ -75,6 +79,12 @@ def make_arg_parser():
         action="store_true",
         help="Do not display unnecessary messages",
     )
+    parser.add_argument(
+        "--json-error",
+        dest=JSON_ERROR_ARG,
+        action="store_true",
+        help="Emit errors as JSON on stderr",
+    )
     return parser
 
 
@@ -103,7 +113,7 @@ def is_argument_valid(arg_name, arg_value, overwrite):
         return arg_value.endswith(".docx") and check_exists_ask_overwrite(
             arg_value, overwrite
         )
-    elif arg_name in [OVERWRITE_ARG, QUIET_ARG, VALIDATE_ARG]:
+    elif arg_name in [OVERWRITE_ARG, QUIET_ARG, VALIDATE_ARG, JSON_ERROR_ARG]:
         return arg_value in [True, False]
     elif arg_name == REPORT_ARG:
         return arg_value is None or isinstance(arg_value, str)
@@ -253,11 +263,16 @@ def main():
         doc = render_docx(doc, json_data)
         save_file(doc, parsed_args)
     except TemplateError as e:
-        emit_cli_error(template_error_payload(e))
+        emit_cli_error(
+            template_error_payload(e), json_error=parsed_args[JSON_ERROR_ARG]
+        )
     except RuntimeError as e:
-        emit_cli_error({"error": "cli_error", "message": str(e)})
+        emit_cli_error(
+            {"error": "cli_error", "message": str(e)},
+            json_error=parsed_args[JSON_ERROR_ARG],
+        )
     finally:
-        if not parsed_args[QUIET_ARG]:
+        if not parsed_args[QUIET_ARG] and not parsed_args[JSON_ERROR_ARG]:
             print("Exiting program!")
 
 
